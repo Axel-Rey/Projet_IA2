@@ -1,0 +1,9 @@
+# Ignorer le dossier Data
+Data/
+*.csv
+*.npy
+*.pkl
+*.pt
+
+# Ignorer les checkpoints Jupyter
+.ipynb_checkpoints/
