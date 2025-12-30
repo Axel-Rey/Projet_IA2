@@ -1,9 +1,37 @@
-# Ignorer le dossier Data
+# ========== DONNÉES ==========
 Data/
 *.csv
-*.npy
-*.pkl
-*.pt
+*.json
 
-# Ignorer les checkpoints Jupyter
+# ========== MODÈLES & CACHE ==========
+*.pkl
+*.h5
+*.pt
+*.pth
+*.npy
+*.npz
+
+# ========== ENVIRONNEMENT VIRTUEL (ÉNORME!) ==========
+notebook_env/
+.venv/
+venv/
+env/
+
+# ========== JUPYTER & IDE ==========
 .ipynb_checkpoints/
+.jupyter/
+.vscode/
+*.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# ========== PYTHON ==========
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# ========== FICHIERS SYSTÈME ==========
+.DS_Store
+Thumbs.db

@@ -1,0 +1,40 @@
+Collecting package metadata (current_repodata.json): ...working... done
+Solving environment: ...working... done
+
+## Package Plan ##
+
+  environment location: C:\Users\axelr\anaconda4lebon
+
+  added / updated specs:
+    - numpy
+    - pandas
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    ca-certificates-2025.11.12 |       h4c7d964_0         149 KB  conda-forge
+    certifi-2025.11.12         |     pyhd8ed1ab_0         153 KB  conda-forge
+    ------------------------------------------------------------
+                                           Total:         303 KB
+
+The following packages will be SUPERSEDED by a higher-priority channel:
+
+  ca-certificates    pkgs/main/win-64::ca-certificates-202~ --> conda-forge/noarch::ca-certificates-2025.11.12-h4c7d964_0 
+  certifi            pkgs/main/win-64::certifi-2025.11.12-~ --> conda-forge/noarch::certifi-2025.11.12-pyhd8ed1ab_0 
+
+
+
+Downloading and Extracting Packages
+certifi-2025.11.12   | 153 KB    |            |   0% 
+ca-certificates-2025 | 149 KB    |            |   0% [A
+ca-certificates-2025 | 149 KB    | #          |  11% [A
+ca-certificates-2025 | 149 KB    | ##1        |  21% [A
+ca-certificates-2025 | 149 KB    | ######4    |  64% [A
+ca-certificates-2025 | 149 KB    | ########## | 100% [A
+ca-certificates-2025 | 149 KB    | ########## | 100% [Acertifi-2025.11.12   | 153 KB    | #          |  10% certifi-2025.11.12   | 153 KB    | ####1      |  42% certifi-2025.11.12   | 153 KB    | ########3  |  83% certifi-2025.11.12   | 153 KB    | ########## | 100%                                                      
+                                                     [A
+Preparing transaction: ...working... done
+Verifying transaction: ...working... done
+Executing transaction: ...working... done
