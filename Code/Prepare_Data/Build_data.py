@@ -1,293 +1,358 @@
-# ============================================================
-# PURPOSE OF THIS SCRIPT
-# ============================================================
-# This script prepares and cleans movie datasets to be used
-# by machine learning models. It includes:
-# - Loading raw data from CSVs
-# - Cleaning and converting data types
-# - Merging multiple sources into a single dataset
-# - Feature engineering (popularity, counts, weighted rating)
-# - Handling missing values
-# - Encoding categorical features (genres)
-# - Splitting into train/test sets
-# - Exporting final datasets for later use
-# 
-# Note: No ML modeling is performed in this script.
-# ============================================================
-
-
-# ============================================================
-# Imports
-# ============================================================
-print("Step 1: Importing libraries...")
+# ============================================================================
+# MOVIE DATASET PREPROCESSING
+# ============================================================================
+# Ce script prépare et nettoie les datasets de films pour être utilisés
+# par les modèles de machine learning. Il inclut :
+# - Chargement des données brutes depuis les CSVs
+# - Nettoyage et conversion des types de données
+# - Fusion de plusieurs sources en un dataset unique
+# - Feature engineering (popularité, comptages, qualité acteurs/crew)
+# - Gestion des valeurs manquantes
+# - Encodage des features catégorielles (genres)
+# - Split train/test
+# - Export des datasets finaux pour utilisation ultérieure
+#
+# Note: Aucun modèle ML n'est entraîné dans ce script.
+# ============================================================================
 
 import pandas as pd
 import numpy as np
-import ast   # to safely parse JSON-like strings in CSV
-import os    # for file and path handling
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.model_selection import train_test_split
+from collections import Counter
+import ast
+import os
+import warnings
+warnings.filterwarnings('ignore')
 
-print("   Libraries imported successfully.")
+print("="*80)
+print("MOVIE DATASET PREPROCESSING")
+print("="*80)
 
+# ============================================================================
+# 1. RÉSOLUTION DES CHEMINS
+# ============================================================================
 
-# ============================================================
-# Resolve project paths
-# ============================================================
-print("\nStep 2: Resolving project paths...")
+print("\nStep 1: Resolving project paths...")
 
-# Absolute path to this script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+DATA_DIR = os.path.join(BASE_DIR, "Data")
+EXPORT_DIR = os.path.join(DATA_DIR, "Processed")
 
-# Data folder is assumed to be ../../Data relative to this script
-DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "Data"))
+os.makedirs(EXPORT_DIR, exist_ok=True)
 
 print(f"   Data directory: {DATA_DIR}")
+print(f"   Export directory: {EXPORT_DIR}")
 
+# ============================================================================
+# 2. CHARGEMENT DES DONNÉES BRUTES
+# ============================================================================
 
-# ============================================================
-# Load raw CSV datasets
-# ============================================================
-print("\nStep 3: Loading CSV files...")
+print("\nStep 2: Loading raw CSV files...")
 
-# Movie metadata (title, budget, popularity, etc.)
-movies = pd.read_csv(os.path.join(DATA_DIR, "movies_metadata.csv"), low_memory=False)
-print(f"   Movies dataset shape: {movies.shape}")
-
-# Movie credits (cast and crew)
-credits = pd.read_csv(os.path.join(DATA_DIR, "credits.csv"))
-print(f"   Credits dataset shape: {credits.shape}")
-
-# Movie keywords
-keywords = pd.read_csv(os.path.join(DATA_DIR, "keywords.csv"))
-print(f"   Keywords dataset shape: {keywords.shape}")
-
-
-# ============================================================
-# Select only relevant columns from movies dataset
-# ============================================================
-print("\nStep 4: Selecting relevant columns...")
-
-# Only keep columns we will use in modeling or feature engineering
-movies = movies[[
-    "id", "title", "genres", "runtime", "budget",
-    "vote_average", "vote_count", "popularity"
-]]
-print(f"   Movies dataset after column selection: {movies.shape}")
-
-
-# ============================================================
-# Convert types and clean basic data
-# ============================================================
-print("\nStep 5: Cleaning data and converting types...")
-
-# Convert numeric fields from string to proper numeric types
-movies["id"] = pd.to_numeric(movies["id"], errors="coerce")
-movies["budget"] = pd.to_numeric(movies["budget"], errors="coerce")
-movies["runtime"] = pd.to_numeric(movies["runtime"], errors="coerce")
-
-# Remove rows with missing id or title (cannot use these rows)
-movies = movies.dropna(subset=["id", "title"])
-
-# Ensure movie IDs are integers
-movies["id"] = movies["id"].astype(int)
-
-print(f"   Movies dataset after cleaning: {movies.shape}")
-
-
-# ============================================================
-# Helper function to parse JSON-like text columns
-# ============================================================
 def parse_json_list(json_str, key):
-    """
-    Safely parse a JSON-like string representing a list of dictionaries
-    and extract values associated with a specific key.
-    
-    If parsing fails or the string is empty, returns an empty list.
-    """
+    """Parse JSON strings and extract key values"""
     try:
-        data = ast.literal_eval(json_str)
-        return [item[key] for item in data]
+        return [item[key] for item in ast.literal_eval(json_str)]
     except:
         return []
 
+# Charger les datasets
+movies = pd.read_csv(os.path.join(DATA_DIR, "movies_metadata.csv"), low_memory=False)
+credits = pd.read_csv(os.path.join(DATA_DIR, "credits.csv"))
+keywords = pd.read_csv(os.path.join(DATA_DIR, "keywords.csv"))
 
-# ============================================================
-# Parse list columns: genres, actors, crew, keywords
-# ============================================================
-print("\nStep 6: Parsing JSON-like columns...")
+print(f"   Movies: {movies.shape}")
+print(f"   Credits: {credits.shape}")
+print(f"   Keywords: {keywords.shape}")
+
+# ============================================================================
+# 3. SÉLECTION ET NETTOYAGE DES COLONNES
+# ============================================================================
+
+print("\nStep 3: Selecting relevant columns and cleaning...")
+
+# Sélectionner colonnes pertinentes
+movies = movies[["id", "title", "genres", "runtime", "vote_average", "vote_count", 
+                 "popularity", "original_language", "release_date",
+                 "production_companies", "production_countries"]]
+
+# Convertir types
+for col in ["id", "runtime"]:
+    movies[col] = pd.to_numeric(movies[col], errors="coerce")
+movies = movies.dropna(subset=["id", "title"])
+movies["id"] = movies["id"].astype(int)
+
+print(f"   Movies after cleaning: {movies.shape}")
+
+# ============================================================================
+# 4. PARSING DES COLONNES JSON
+# ============================================================================
+
+print("\nStep 4: Parsing JSON-like columns...")
 
 movies["genres"] = movies["genres"].apply(lambda x: parse_json_list(x, "name"))
 credits["actors"] = credits["cast"].apply(lambda x: parse_json_list(x, "name"))
 credits["crew"] = credits["crew"].apply(lambda x: parse_json_list(x, "name"))
 keywords["keywords"] = keywords["keywords"].apply(lambda x: parse_json_list(x, "name"))
+movies["production_companies"] = movies["production_companies"].apply(lambda x: parse_json_list(x, "name"))
+movies["production_countries"] = movies["production_countries"].apply(lambda x: parse_json_list(x, "iso_3166_1"))
 
-print("   JSON parsing completed.")
+print("   JSON parsing completed")
 
+# ============================================================================
+# 5. FUSION DES DATASETS
+# ============================================================================
 
-# ============================================================
-# Merge datasets into a single dataframe
-# ============================================================
-print("\nStep 7: Merging datasets...")
+print("\nStep 5: Merging datasets...")
 
-# Merge movie metadata with credits
-df = movies.merge(
-    credits[["id", "actors", "crew"]],
-    on="id",
-    how="left"
-)
+df = movies.merge(credits[["id", "actors", "crew"]], on="id", how="left")
+df = df.merge(keywords[["id", "keywords"]], on="id", how="left")
 
-# Merge with keywords
-df = df.merge(
-    keywords[["id", "keywords"]],
-    on="id",
-    how="left"
-)
+# Convertir et filtrer
+for col in ["popularity", "vote_count", "vote_average"]:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
+df = df[(df['vote_average'] > 0.0) & (df['vote_count'] >= 10)].copy()
 
-print(f"   Merged dataframe shape: {df.shape}")
+print(f"   Merged dataset: {df.shape}")
+print(f"   After filtering (vote_count >= 10): {len(df)} movies")
 
+# ============================================================================
+# 6. FEATURE ENGINEERING - FEATURES TEMPORELLES
+# ============================================================================
 
-# ============================================================
-# Weighted rating feature
-# ============================================================
-print("\nStep 8: Computing weighted rating...")
+print("\nStep 6: Engineering temporal features...")
 
-# Weighted rating formula balances movies with few votes vs many votes
-df["weighted_rating"] = (df["vote_average"] * df["vote_count"]) / (df["vote_count"] + 100)
+df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
+df['release_year'] = df['release_date'].dt.year
+df['release_month'] = df['release_date'].dt.month
+df['film_age'] = 2024 - df['release_year']
+df['is_recent'] = (df['release_year'] >= 2010).astype(int)
 
-print("   Weighted rating computed.")
+print("   Temporal features created")
 
+# ============================================================================
+# 7. FEATURE ENGINEERING - FEATURES DE PRODUCTION
+# ============================================================================
 
-# ============================================================
-# Train/test split
-# ============================================================
-print("\nStep 9: Splitting into train and test sets...")
+print("\nStep 7: Engineering production features...")
 
-from sklearn.model_selection import train_test_split
+df['is_english'] = (df['original_language'] == 'en').astype(int)
+df['num_production_companies'] = df['production_companies'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+df['num_production_countries'] = df['production_countries'].apply(lambda x: len(x) if isinstance(x, list) else 0)
 
-train_df, test_df = train_test_split(
-    df,
-    test_size=0.2,
-    random_state=42
-)
+print("   Production features created")
 
-print(f"   Train set shape: {train_df.shape}")
-print(f"   Test set shape: {test_df.shape}")
+# ============================================================================
+# 8. FEATURE ENGINEERING - FEATURES DE COMPTAGE
+# ============================================================================
 
+print("\nStep 8: Engineering counting features...")
 
-# ============================================================
-# Compute popularity features for actors and crew
-# ============================================================
-print("\nStep 10: Computing popularity features...")
+df['num_actors'] = df['actors'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+df['num_crew'] = df['crew'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+df['num_genres'] = df['genres'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+df['num_keywords'] = df['keywords'].apply(lambda x: len(x) if isinstance(x, list) else 0)
+df['genres'] = df['genres'].apply(lambda x: x if isinstance(x, list) and len(x) > 0 else ['Unknown'])
 
-from collections import Counter
+print("   Counting features created")
 
-# Count how many times each actor appears in TRAIN dataset
-actor_popularity = Counter()
-for actors in train_df["actors"]:
-    actor_popularity.update(actors)
+# ============================================================================
+# 9. FEATURE ENGINEERING - TRANSFORMATIONS
+# ============================================================================
 
-# Count crew appearances
-crew_popularity = Counter()
-for crew in train_df["crew"]:
-    crew_popularity.update(crew)
+print("\nStep 9: Engineering transformed features...")
 
-# Function to extract popularity metrics
-def popularity_features(names, popularity_dict):
-    """
-    For a list of names (actors or crew), compute:
-    - mean popularity
-    - max popularity
-    - number of well-known people (appeared > 5 times)
-    """
+df['log_popularity'] = np.log1p(df['popularity'])
+df['log_vote_count'] = np.log1p(df['vote_count'])
+df['log_runtime'] = np.log1p(df['runtime'].fillna(0))
+df['sqrt_vote_count'] = np.sqrt(df['vote_count'])
+df['popularity_per_vote'] = df['popularity'] / (df['vote_count'] + 1)
+df['vote_confidence'] = df['sqrt_vote_count'] / (df['sqrt_vote_count'] + 10)
+
+print("   Transformed features created")
+
+# ============================================================================
+# 10. TRAIN-TEST SPLIT
+# ============================================================================
+
+print("\nStep 10: Splitting into train and test sets...")
+
+df['rating_quantile'] = pd.qcut(df['vote_average'], q=10, labels=False, duplicates='drop')
+train_df, test_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df['rating_quantile'])
+train_df = train_df.drop('rating_quantile', axis=1)
+test_df = test_df.drop('rating_quantile', axis=1)
+
+print(f"   Training set: {len(train_df)} movies")
+print(f"   Test set: {len(test_df)} movies")
+
+# ============================================================================
+# 11. FEATURES DE POPULARITÉ ET QUALITÉ ACTEURS/CREW
+# ============================================================================
+
+print("\nStep 11: Computing actor/crew popularity and quality features...")
+
+def calculate_popularity_quality(train_data):
+    """Calculer popularité et qualité des acteurs/crew"""
+    actor_pop = Counter()
+    crew_pop = Counter()
+    actor_rating = {}
+    crew_rating = {}
+    
+    for _, row in train_data.iterrows():
+        if isinstance(row['actors'], list):
+            actor_pop.update(row['actors'])
+            for actor in row['actors']:
+                actor_rating.setdefault(actor, []).append(row['vote_average'])
+        if isinstance(row['crew'], list):
+            crew_pop.update(row['crew'])
+            for person in row['crew']:
+                crew_rating.setdefault(person, []).append(row['vote_average'])
+    
+    actor_avg = {k: np.mean(v) for k, v in actor_rating.items()}
+    crew_avg = {k: np.mean(v) for k, v in crew_rating.items()}
+    
+    return actor_pop, crew_pop, actor_avg, crew_avg
+
+def quality_features(names, pop_dict, qual_dict, default=6.0):
+    """Extract quality metrics"""
     if not isinstance(names, list) or len(names) == 0:
-        return 0.0, 0.0, 0
-    pops = [popularity_dict.get(name, 0) for name in names]
-    return sum(pops)/len(pops), max(pops), sum(p > 5 for p in pops)
+        return 0.0, 0.0, 0, default, default
+    pops = [pop_dict.get(name, 0) for name in names]
+    quals = [qual_dict.get(name, default) for name in names]
+    return (np.mean(pops), max(pops), sum(p > 5 for p in pops), np.mean(quals), min(quals))
 
-# Apply to actors
-train_df[["actor_pop_mean", "actor_pop_max", "actor_pop_known"]] = train_df["actors"].apply(
-    lambda x: pd.Series(popularity_features(x, actor_popularity))
-)
-test_df[["actor_pop_mean", "actor_pop_max", "actor_pop_known"]] = test_df["actors"].apply(
-    lambda x: pd.Series(popularity_features(x, actor_popularity))
-)
+actor_pop, crew_pop, actor_avg, crew_avg = calculate_popularity_quality(train_df)
 
-# Apply to crew
-train_df[["crew_pop_mean", "crew_pop_max", "crew_pop_known"]] = train_df["crew"].apply(
-    lambda x: pd.Series(popularity_features(x, crew_popularity))
-)
-test_df[["crew_pop_mean", "crew_pop_max", "crew_pop_known"]] = test_df["crew"].apply(
-    lambda x: pd.Series(popularity_features(x, crew_popularity))
-)
+for df_temp in [train_df, test_df]:
+    result = df_temp["actors"].apply(lambda x: pd.Series(quality_features(x, actor_pop, actor_avg)))
+    df_temp[["actor_pop_mean", "actor_pop_max", "actor_pop_known", "actor_quality_mean", "actor_quality_min"]] = result
+    
+    result = df_temp["crew"].apply(lambda x: pd.Series(quality_features(x, crew_pop, crew_avg)))
+    df_temp[["crew_pop_mean", "crew_pop_max", "crew_pop_known", "crew_quality_mean", "crew_quality_min"]] = result
+    
+    df_temp['quality_signal'] = (df_temp['actor_quality_mean'] + df_temp['crew_quality_mean']) / 2
 
-print("   Popularity features added.")
+print("   Actor/crew quality features created")
 
+# ============================================================================
+# 12. ENCODAGE DES GENRES
+# ============================================================================
 
-# ============================================================
-# Handle missing values
-# ============================================================
-print("\nStep 11: Handling missing values...")
-
-numeric_cols = [
-    'budget', 'runtime', 'popularity', 'vote_count',
-    'actor_pop_mean', 'actor_pop_max', 'actor_pop_known',
-    'crew_pop_mean', 'crew_pop_max', 'crew_pop_known'
-]
-
-# Replace NaN in numeric columns with 0
-for col in numeric_cols:
-    train_df[col] = train_df[col].fillna(0)
-    test_df[col] = test_df[col].fillna(0)
-
-# Ensure at least one genre per movie
-train_df['genres'] = train_df['genres'].apply(lambda x: x if isinstance(x, list) and len(x) > 0 else ['Unknown'])
-test_df['genres'] = test_df['genres'].apply(lambda x: x if isinstance(x, list) and len(x) > 0 else ['Unknown'])
-
-print("   Missing values handled.")
-
-
-# ============================================================
-# Count-based features
-# ============================================================
-print("\nStep 12: Creating count-based features (number of actors, crew, genres, keywords)...")
-
-for col, src in [
-    ("num_actors", "actors"),
-    ("num_crew", "crew"),
-    ("num_genres", "genres"),
-    ("num_keywords", "keywords")
-]:
-    train_df[col] = train_df[src].apply(lambda x: len(x) if isinstance(x, list) else 0)
-    test_df[col] = test_df[src].apply(lambda x: len(x) if isinstance(x, list) else 0)
-
-print("   Count-based features created.")
-
-
-# ============================================================
-# Encode genres with MultiLabelBinarizer
-# ============================================================
-print("\nStep 13: Encoding genres as multi-hot vectors...")
-
-from sklearn.preprocessing import MultiLabelBinarizer
+print("\nStep 12: Encoding genres as multi-hot vectors...")
 
 mlb = MultiLabelBinarizer()
 train_genres_encoded = mlb.fit_transform(train_df['genres'])
 test_genres_encoded = mlb.transform(test_df['genres'])
 
-print(f"   Number of genre features: {len(mlb.classes_)}")
+train_genres_df = pd.DataFrame(train_genres_encoded, columns=[f'genre_{g}' for g in mlb.classes_], index=train_df.index)
+test_genres_df = pd.DataFrame(test_genres_encoded, columns=[f'genre_{g}' for g in mlb.classes_], index=test_df.index)
 
+print(f"   Encoded {len(mlb.classes_)} unique genres")
 
-# ============================================================
-# Export cleaned datasets
-# ============================================================
-print("\nStep 14: Exporting processed datasets...")
+# ============================================================================
+# 13. GESTION DES VALEURS MANQUANTES
+# ============================================================================
 
-DATASETS_EXPORT_DIR = os.path.join(DATA_DIR, "Datasets")
-os.makedirs(DATASETS_EXPORT_DIR, exist_ok=True)
+print("\nStep 13: Handling missing values...")
 
-train_df.to_csv(os.path.join(DATASETS_EXPORT_DIR, "train_dataset.csv"), index=False)
-test_df.to_csv(os.path.join(DATASETS_EXPORT_DIR, "test_dataset.csv"), index=False)
+feature_cols = [
+    'runtime', 'popularity', 'vote_count',
+    'actor_pop_mean', 'actor_pop_max', 'actor_pop_known', 'actor_quality_mean', 'actor_quality_min',
+    'crew_pop_mean', 'crew_pop_max', 'crew_pop_known', 'crew_quality_mean', 'crew_quality_min',
+    'num_actors', 'num_crew', 'num_genres', 'num_keywords',
+    'log_popularity', 'log_vote_count', 'log_runtime', 'sqrt_vote_count',
+    'popularity_per_vote', 'vote_confidence', 'quality_signal',
+    'release_year', 'release_month', 'film_age', 'is_recent',
+    'is_english', 'num_production_companies', 'num_production_countries'
+]
 
-print("   Datasets successfully exported.")
-print(f"   Train dataset: {os.path.join(DATASETS_EXPORT_DIR, 'train_dataset.csv')}")
-print(f"   Test dataset:  {os.path.join(DATASETS_EXPORT_DIR, 'test_dataset.csv')}")
-print("\nData preparation completed successfully.")
+for col in feature_cols:
+    train_df[col] = train_df[col].fillna(0)
+    test_df[col] = test_df[col].fillna(0)
+
+print("   Missing values handled")
+
+# ============================================================================
+# 14. PRÉPARATION DES MATRICES FINALES
+# ============================================================================
+
+print("\nStep 14: Preparing final feature matrices...")
+
+X_train = pd.concat([train_df[feature_cols].reset_index(drop=True), train_genres_df.reset_index(drop=True)], axis=1)
+X_test = pd.concat([test_df[feature_cols].reset_index(drop=True), test_genres_df.reset_index(drop=True)], axis=1)
+
+y_train = train_df['vote_average'].values
+y_test = test_df['vote_average'].values
+
+print(f"   X_train shape: {X_train.shape}")
+print(f"   X_test shape: {X_test.shape}")
+print(f"   y_train shape: {y_train.shape}")
+print(f"   y_test shape: {y_test.shape}")
+
+# ============================================================================
+# 15. STATISTIQUES DESCRIPTIVES
+# ============================================================================
+
+print("\n" + "="*80)
+print("DATASET STATISTICS")
+print("="*80)
+
+print(f"\n📊 RATING DISTRIBUTION:")
+print(f"   Mean: {y_train.mean():.2f}")
+print(f"   Std: {y_train.std():.2f}")
+print(f"   Min: {y_train.min():.2f}")
+print(f"   Max: {y_train.max():.2f}")
+print(f"   Median: {np.median(y_train):.2f}")
+
+print(f"\n📊 FEATURE SUMMARY:")
+print(f"   Total features: {X_train.shape[1]}")
+print(f"   Numeric features: {len(feature_cols)}")
+print(f"   Genre features: {len(mlb.classes_)}")
+
+print(f"\n📊 GENRE DISTRIBUTION (Top 10):")
+genre_counts = train_genres_df.sum().sort_values(ascending=False).head(10)
+for genre, count in genre_counts.items():
+    genre_name = genre.replace('genre_', '')
+    percentage = (count / len(train_df)) * 100
+    print(f"   {genre_name:<20} {count:>6} ({percentage:>5.1f}%)")
+
+# ============================================================================
+# 16. EXPORT DES DATASETS
+# ============================================================================
+
+print("\n" + "="*80)
+print("EXPORTING PROCESSED DATASETS")
+print("="*80)
+
+# Export des DataFrames avec métadonnées
+train_df.to_csv(os.path.join(EXPORT_DIR, "train_metadata.csv"), index=False)
+test_df.to_csv(os.path.join(EXPORT_DIR, "test_metadata.csv"), index=False)
+
+# Export des matrices de features
+X_train.to_csv(os.path.join(EXPORT_DIR, "X_train.csv"), index=False)
+X_test.to_csv(os.path.join(EXPORT_DIR, "X_test.csv"), index=False)
+
+# Export des labels
+pd.DataFrame({'vote_average': y_train}).to_csv(os.path.join(EXPORT_DIR, "y_train.csv"), index=False)
+pd.DataFrame({'vote_average': y_test}).to_csv(os.path.join(EXPORT_DIR, "y_test.csv"), index=False)
+
+# Export du MultiLabelBinarizer pour réutilisation
+import pickle
+with open(os.path.join(EXPORT_DIR, "genre_encoder.pkl"), 'wb') as f:
+    pickle.dump(mlb, f)
+
+print("\n✓ Files exported:")
+print(f"   - {os.path.join(EXPORT_DIR, 'train_metadata.csv')}")
+print(f"   - {os.path.join(EXPORT_DIR, 'test_metadata.csv')}")
+print(f"   - {os.path.join(EXPORT_DIR, 'X_train.csv')}")
+print(f"   - {os.path.join(EXPORT_DIR, 'X_test.csv')}")
+print(f"   - {os.path.join(EXPORT_DIR, 'y_train.csv')}")
+print(f"   - {os.path.join(EXPORT_DIR, 'y_test.csv')}")
+print(f"   - {os.path.join(EXPORT_DIR, 'genre_encoder.pkl')}")
+
+print("\n" + "="*80)
+print("PREPROCESSING COMPLETED SUCCESSFULLY")
+print("="*80)
+print("\n💡 Next step: Run the ML training script with the processed data")
